@@ -9,70 +9,30 @@ To use this plugin you need to have access to OpenAI's `Codex API`_.
 
 .. _Codex API: https://openai.com/blog/openai-codex/
 
-Installation
+This repository is a fork of `vim-codex`_ by `@tom-doerr`_.
+
+.. _vim-codex: https://github.com/tom-doerr/vim-codex
+.. _@tom-doerr: https://github.com/tom-doerr
+
+
+Configuration
 ============
 
-The easiest way to install the plugin is to install it as a bundle.
-For example, using Pathogen__:
-
-1. Get and install `pathogen.vim <https://github.com/tpope/vim-pathogen>`_. You can skip this step
-   if you already have it installed.
-
-2. ``cd ~/.vim/bundle``
-
-3. ``git clone git@github.com:tom-doerr/vim_codex.git``
-
-__ https://github.com/tpope/vim-pathogen
-
-Bundle installs are known to work fine also when using Vundle__. Other
-bundle managers are expected to work as well.
-
-__ https://github.com/gmarik/vundle
-
-
-
-
-After installing the plugin, you need to install the openai package::
-
-  pip3 install openai
-
-Finally add your OpenAI access information in 
-``~/.vim/bundle/vim_codex/python/AUTH.py``.
-You can find your authentication information on the website__.
-
-__ https://beta.openai.com/account/api-keys
+Default config file is at `~/.config/vim_codex/vim_codex.conf`.
+The path could be changed with `g:vim_codex_conf`.
+The API key could be supplied as::
+  
+  # vim_codex.conf
+  {"secret_key":"XXXXXXXXX"}
 
 Usage
 =====
-The plugin provides a ``CreateCompletion`` command which you can call by default using the mapping 
-``<Leader>co``.
+The plugin provides function "create_completion(params)" together with a binding::
 
-To complete the current text from insert and normal mode using Ctrl+x, you can add the following
-lines to your .vimrc::
+  imap <C-e> <C-\><C-O>:python3 plugin.create_completion()<CR><Right>
 
-  nmap  <C-x> :CreateCompletion<CR>
-  imap  <C-x> <Esc>l:CreateCompletion<CR>i
+Parameter `params` could be a dictionary for tuning the completion.
 
+For example::
 
-
-Updating
-========
-
-Manually
---------
-
-In order to update the plugin, go to its bundle directory and use
-Git to update it:
-
-1. ``cd ~/.vim/bundle/vim_codex``
-
-2. ``git pull``
-
-
-With Vundle
------------
-
-Use the ``:BundleUpdate`` command provided by Vundle, for example invoking
-Vim like this::
-
-  % vim +BundleUpdate
+  create_completion({'stop':'\n'})

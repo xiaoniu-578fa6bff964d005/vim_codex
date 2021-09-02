@@ -20,20 +20,10 @@ sys.path.insert(0, python_root_dir)
 import plugin
 EOF
 
+let g:vim_codex_conf =
+      \ get( g:, 'vim_codex_conf', '' )
 
-
-function! CreateCompletion()
-  python3 plugin.create_completion()
-endfunction
-
-function! CreateCompletionLine()
-  python3 plugin.create_completion(stop='\n')
-endfunction
-
-command! -nargs=0 CreateCompletion call CreateCompletion()
-command! -nargs=0 CreateCompletionLine call CreateCompletionLine()
-
-map <Leader>co :CreateCompletion<CR>
-
+imap <C-e> <C-\><C-O>:python3 plugin.create_completion()<CR><C-\><C-O>me
+imap <C-l> <C-\><C-O>:python3 plugin.create_completion(param={"stop":"\n"})<CR><C-\><C-O>me
 
 let g:sample_python_plugin_loaded = 1

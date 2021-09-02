@@ -1,91 +1,136 @@
-import urllib, urllib.request
 import json
 
 try:
-  import vim
+    import vim
 except:
-  print("No vim module available outside vim")
-  pass
+    print("No vim module available outside vim")
+    pass
 
 
 import openai
-from AUTH import *
-
-openai.organization = ORGANIZATION_ID
-openai.api_key = SECRET_KEY
-MAX_SUPPORTED_INPUT_LENGTH = 4096
-USE_STREAM_FEATURE = True
-
-def complete_input_max_length(input_prompt, max_input_length=MAX_SUPPORTED_INPUT_LENGTH, stop=None):
-    input_prompt = input_prompt[-max_input_length:]
-
-    response = openai.Completion.create(engine='davinci-codex', prompt=input_prompt, best_of=1, temperature=0.5, max_tokens=64, stream=USE_STREAM_FEATURE, stop=stop)
-    return response
-
-def complete_input(input_prompt, stop):
-    try:
-        response = complete_input_max_length(input_prompt, int(2.5 * MAX_SUPPORTED_INPUT_LENGTH), stop=stop)
-    except openai.error.InvalidRequestError:
-        response = complete_input_max_length(input_prompt, MAX_SUPPORTED_INPUT_LENGTH, stop=stop)
-        # print('Using shorter input.')
-
-    return response
 
 
-def create_completion(stop=None): 
+class Config:
+    def __init__(self):
+        self.organization_id = ""
+        self.secret_key = ""
+        self.default_param = {
+            "engine": "davinci-codex",
+            "max_generated_tokens": 64,
+            "best_of": 1,
+            "temperature": 0.0,
+            "stop": None,
+            "max_supported_input_length": 4096 - 64,
+            "use_stream_feature": True,
+        }
+
+
+import collections.abc
+
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+
+def load_config():
+    import os
+
+    config_path = vim.eval(
+        "get( g:, 'vim_codex_conf', '~/.config/vim_codex/vim_codex.conf' )"
+    )
+    config_path = os.path.expanduser(config_path)
+    config = Config()
+    if os.path.isfile(config_path):
+        with open(config_path, "r") as f:
+            config_json = json.loads(f.read())
+        update(config.__dict__, config_json)
+    return config
+
+
+def load_openai_config(config):
+    openai.organization = config.organization_id
+    openai.api_key = config.secret_key
+
+
+config = load_config()
+load_openai_config(config)
+
+
+def complete_input(input_prompt, param={}):
+    param = dict(config.default_param, **param)
+
+    assert (
+        len(input_prompt) <= param["max_supported_input_length"]
+    ), "input is too long."
+    assert (
+        len(input_prompt) + param["max_generated_tokens"] <= 4096
+    ), "input is too long and response size is zero."
+
+    response = openai.Completion.create(
+        engine=param["engine"],
+        prompt=input_prompt,
+        best_of=param["best_of"],
+        temperature=param["temperature"],
+        max_tokens=param["max_generated_tokens"],
+        stream=param["use_stream_feature"],
+        stop=param["stop"],
+    )
+    return response, param
+
+
+def create_completion(param={}):
+    # read from current buffer
     vim_buf = vim.current.buffer
-    input_prompt = '\n'.join(vim_buf[:])
-    
-    row, col = vim.current.window.cursor
-    input_prompt = '\n'.join(vim_buf[row:])
-    input_prompt += '\n'.join(vim_buf[:row-1])
-    input_prompt += '\n' + vim_buf[row-1][:col]
-    response = complete_input(input_prompt, stop=stop)
-    write_response(response, stop=stop)
 
-def write_response(response, stop):
+    row, col = vim.current.window.cursor  # row is 1-based, col is 0-based
+    before = "\n".join(vim_buf[: row - 1] + [vim_buf[row - 1][:col]])
+    after = "\n".join([vim_buf[row - 1][col:]] + vim_buf[row:])
+    input_prompt = (after + before)[
+        -config.default_param["max_supported_input_length"] :
+    ]
+    # compute response
+    response, param = complete_input(input_prompt, param)
+    if not isinstance(response, collections.abc.Generator):
+        response = (response,)
+    # write to buffer
+    write_response_sequence(response, param)
+
+
+def write_response_sequence(response, param):
+    # output buffer
+    for single_response in response:
+        completion = single_response["choices"][0]["text"]
+        write_response(completion)
+
+
+def write_response(t):
     vim_buf = vim.current.buffer
     vim_win = vim.current.window
-    while True:
-        if USE_STREAM_FEATURE:
-            single_response = next(response)
+
+    row, col = vim_win.cursor
+    current_line = vim_buf[row - 1]
+    new_line = current_line[:col] + t + current_line[col:]
+
+    def insert_blanks_at(i, num):
+        if i == len(vim_buf):
+            for _ in range(num):
+                vim_buf.append("")
         else:
-            single_response = response
-        completion = single_response['choices'][0]['text']
-        if stop == '\n':
-            completion += '\n'
-        row, col = vim.current.window.cursor
-        current_line = vim.current.buffer[row-1]
-        new_line = current_line[:col] + completion + current_line[col:]
-        if not USE_STREAM_FEATURE:
-            if new_line == '':
-                new_line = new_line
-            elif new_line[-1] == '\n':
-                new_line = new_line[:-1]
-        new_lines = new_line.split('\n')
-        new_lines.reverse()
-        if len(vim_buf) == row:
-            vim_buf.append('')
-               
-        vim_buf[row-1] = None
-        cursor_pos_base = tuple(vim_win.cursor)
-        for row_i in range(len(new_lines)):
-            vim.current.buffer[row-1:row-1] = [new_lines[row_i]]
+            vim_buf[i:i] = ["" for _ in range(num)]
 
-        if new_line == '':
-            cursor_target_col = 0
-        elif new_line[-1] != '\n':
-            cursor_target_col = len(new_lines[0])
-        else:
-            cursor_target_col = 0
-        vim_win.cursor = (cursor_pos_base[0] + row_i, cursor_target_col)
+    new_lines = new_line.split("\n")
+    insert_blanks_at(row, len(new_lines) - 1)
 
-        if not USE_STREAM_FEATURE:
-            break
+    for row_i in range(len(new_lines)):
+        vim_buf[row - 1 : row - 1 + len(new_lines)] = new_lines
 
-        # Flush the vim buffer.
-        vim.command("redraw")
-        if USE_STREAM_FEATURE:
-            if single_response['choices'][0]['finish_reason'] != None: break
+    new_col = len(new_lines[-1]) - (len(current_line) - col)
 
-
+    vim_win.cursor = (row + len(new_lines) - 1, new_col)
+    #  Flush the vim buffer.
+    vim.command("redraw")
