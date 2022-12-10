@@ -15,8 +15,7 @@ class Config:
         self.organization_id = ""
         self.secret_key = ""
         self.default_param = {
-            #  "engine": "davinci-codex",
-            "engine": "code-davinci-001",
+            "engine": "code-davinci-002",
             "max_generated_tokens": 64,
             "best_of": 1,
             "temperature": 0.0,
